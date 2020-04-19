@@ -11,27 +11,27 @@ import java.util.TreeMap;
 
 public class DAOImpl implements DAO {
 
-    private final TreeMap<ByteBuffer, Record> navigableMap = new TreeMap<>();
+    private final TreeMap<ByteBuffer, Record> treeMap = new TreeMap<>();
 
     @NotNull
     @Override
     public Iterator<Record> iterator(@NotNull ByteBuffer from) throws IOException {
-        return navigableMap.tailMap(from).values().iterator();
+        return treeMap.tailMap(from).values().iterator();
     }
 
     @Override
     public void upsert(@NotNull ByteBuffer key, @NotNull ByteBuffer value) throws IOException {
-        navigableMap.put(key, Record.of(key, value));
+        treeMap.put(key, Record.of(key, value));
     }
 
     @Override
     public void remove(@NotNull ByteBuffer key) throws IOException {
-        navigableMap.remove(key);
+        treeMap.remove(key);
     }
 
 
     @Override
     public void close() throws IOException {
-        navigableMap.clear();
+        treeMap.clear();
     }
 }
