@@ -17,6 +17,7 @@
 package ru.mail.polis;
 
 import org.jetbrains.annotations.NotNull;
+import ru.mail.polis.nik27090.DAOImpl;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,6 +55,6 @@ public final class DAOFactory {
         }
 
         // TODO: Implement me
-        throw new UnsupportedOperationException("Implement me!");
+        return new DAOImpl(data, MAX_HEAP);
     }
 }
