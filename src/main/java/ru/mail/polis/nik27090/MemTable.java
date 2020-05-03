@@ -21,7 +21,7 @@ public class MemTable implements Table {
 
     @NotNull
     @Override
-    public Iterator<Cell> iterator(@NotNull ByteBuffer from) {
+    public Iterator<Cell> iterator(@NotNull final ByteBuffer from) {
         return sortedMap.tailMap(from)
                 .entrySet()
                 .stream()
@@ -30,24 +30,23 @@ public class MemTable implements Table {
     }
 
     @Override
-    public void upsert(@NotNull ByteBuffer key, @NotNull ByteBuffer value) {
-        Value valueOfElement = new Value(System.currentTimeMillis(), value.duplicate());
-        Value prevValue = sortedMap.put(key.duplicate(), valueOfElement);
+    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) {
+        final Value valueOfElement = new Value(System.currentTimeMillis(), value.duplicate());
+        final Value prevValue = sortedMap.put(key.duplicate(), valueOfElement);
         if (prevValue == null) {
             sizeInBytes += sizeOfElement(key, valueOfElement);
             size++;
         } else if (prevValue.isTombStone()) {
             sizeInBytes += sizeOfElement(valueOfElement);
         } else {
-            sizeInBytes += sizeOfElement(valueOfElement) - sizeOfElement(prevValue.getValue());
+            sizeInBytes += sizeOfElement(valueOfElement) - sizeOfElement(prevValue.getContent());
         }
     }
 
-
     @Override
-    public void remove(@NotNull ByteBuffer key) {
-        Value valueOfElement = new Value(System.currentTimeMillis(), true);
-        Value prevValue = sortedMap.put(key.duplicate(), valueOfElement);
+    public void remove(@NotNull final ByteBuffer key) {
+        final Value valueOfElement = new Value(System.currentTimeMillis(), true);
+        final Value prevValue = sortedMap.put(key.duplicate(), valueOfElement);
         if (prevValue == null) {
             sizeInBytes += sizeOfElement(key);
             size++;
@@ -70,12 +69,12 @@ public class MemTable implements Table {
 
      result = 69 + keySize
      */
-    private long sizeOfElement(ByteBuffer key) {
+    private long sizeOfElement(final ByteBuffer key) {
         return 69L + key.limit();
     }
 
-    private long sizeOfElement(Value value) {
-        return 74L + value.getValue().limit();
+    private long sizeOfElement(final Value value) {
+        return 74L + value.getContent().limit();
     }
 
     /*
@@ -93,8 +92,8 @@ public class MemTable implements Table {
 
         result = 118 + keySize + valueSize
      */
-    private long sizeOfElement(ByteBuffer key, Value value) {
-        return 118L + key.limit() + value.getValue().limit();
+    private long sizeOfElement(final ByteBuffer key, final Value value) {
+        return 118L + key.limit() + value.getContent().limit();
     }
 
     public int size() {

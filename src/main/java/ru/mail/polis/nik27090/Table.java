@@ -15,7 +15,7 @@ public interface Table {
      * one should not "seek" to start point ("from" element) in linear time ;)
      */
     @NotNull
-    Iterator<Cell> iterator(@NotNull ByteBuffer from) throws IOException;
+    Iterator<Cell> iterator(@NotNull final ByteBuffer from) throws IOException;
 
     /**
      * Inserts or updates value by given key.

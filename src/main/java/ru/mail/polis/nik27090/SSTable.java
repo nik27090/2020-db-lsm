@@ -19,16 +19,14 @@ public class SSTable implements Table {
 
     private final FileChannel channel;
     //количесвтой байт
-    private final long size;
     private final int amountElement;
     private final long indexStart;
 
     private long iterPosition;
 
-
     SSTable(@NotNull final File file) throws IOException {
         this.channel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
-        this.size = channel.size();
+        final long size = channel.size();
         ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
 
         channel.read(byteBuffer, size - Integer.BYTES);
@@ -61,8 +59,8 @@ public class SSTable implements Table {
                     fileChannel.write(ByteBuffer.wrap(new byte[]{1}));
                 } else {
                     fileChannel.write(ByteBuffer.wrap(new byte[]{0}));
-                    fileChannel.write(intToByteBuffer(cell.getValue().getValue().limit()));
-                    fileChannel.write(cell.getValue().getValue());
+                    fileChannel.write(intToByteBuffer(cell.getValue().getContent().limit()));
+                    fileChannel.write(cell.getValue().getContent());
                 }
             } catch (IOException e) {
                 System.out.println("Error: " + e);

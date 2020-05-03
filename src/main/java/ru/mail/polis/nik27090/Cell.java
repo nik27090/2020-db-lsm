@@ -15,8 +15,8 @@ public class Cell {
     private final Value value;
 
     public Cell(
-            @NotNull ByteBuffer key,
-            @NotNull Value value) {
+            @NotNull final ByteBuffer key,
+            @NotNull final Value value) {
         this.key = key;
         this.value = value;
     }

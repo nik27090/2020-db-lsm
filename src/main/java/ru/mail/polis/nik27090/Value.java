@@ -7,18 +7,18 @@ import java.nio.ByteBuffer;
 final class Value implements Comparable<Value> {
     private final long timestamp;
     private final boolean tombStone;
-    private final ByteBuffer value;
+    private final ByteBuffer content;
 
-    public Value(final long timestamp, @NotNull final ByteBuffer value) {
+    public Value(final long timestamp, @NotNull final ByteBuffer content) {
         this.timestamp = timestamp;
-        this.value = value;
+        this.content = content;
         this.tombStone = false;
     }
 
     public Value(final long timestamp, boolean tombStone) {
         this.timestamp = timestamp;
         this.tombStone = tombStone;
-        this.value = null;
+        this.content = null;
     }
 
     public boolean isTombStone() {
@@ -30,8 +30,8 @@ final class Value implements Comparable<Value> {
     }
 
     @NotNull
-    public ByteBuffer getValue() {
-        return value;
+    public ByteBuffer getContent() {
+        return content;
     }
 
     @Override
