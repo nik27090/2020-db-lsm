@@ -7,6 +7,7 @@ import ru.mail.polis.Client;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
@@ -14,9 +15,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 
 public class SSTable implements Table {
-
-    private static final String CANT_READ = "Cant read file";
-    private static final Logger log = LoggerFactory.getLogger(Client.class);
 
     private final FileChannel channel;
     private final int amountElement;
@@ -89,7 +87,7 @@ public class SSTable implements Table {
                 fileChannel.write(buff);
             }
         } catch (IOException e) {
-            log.warn("Cant write file", e);
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -142,7 +140,7 @@ public class SSTable implements Table {
         try {
             channel.read(bbKeySize, iterPosition);
         } catch (IOException e) {
-            log.warn(CANT_READ, e);
+            throw new UncheckedIOException(e);
         }
 
         iterPosition += bbKeySize.limit();
@@ -150,7 +148,7 @@ public class SSTable implements Table {
         try {
             channel.read(bbKeyValue, iterPosition);
         } catch (IOException e) {
-            log.warn(CANT_READ, e);
+            throw new UncheckedIOException(e);
         }
 
         iterPosition += bbKeyValue.limit();
@@ -163,14 +161,14 @@ public class SSTable implements Table {
         try {
             channel.read(bbTimeStamp, iterPosition);
         } catch (IOException e) {
-            log.warn(CANT_READ, e);
+            throw new UncheckedIOException(e);
         }
         iterPosition += bbTimeStamp.limit();
         final ByteBuffer bbIsAlive = ByteBuffer.allocate(1);
         try {
             channel.read(bbIsAlive, iterPosition);
         } catch (IOException e) {
-            log.warn(CANT_READ, e);
+            throw new UncheckedIOException(e);
         }
         final byte isAlive = bbIsAlive.get(0);
         iterPosition += bbIsAlive.limit();
@@ -182,14 +180,14 @@ public class SSTable implements Table {
             try {
                 channel.read(bbValueSize, iterPosition);
             } catch (IOException e) {
-                log.warn(CANT_READ, e);
+                throw new UncheckedIOException(e);
             }
             iterPosition += bbValueSize.limit();
             bbValueContent = ByteBuffer.allocate(bbValueSize.getInt(0));
             try {
                 channel.read(bbValueContent, iterPosition);
             } catch (IOException e) {
-                log.warn(CANT_READ, e);
+                throw new UncheckedIOException(e);
             }
             iterPosition += bbValueContent.limit();
             return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), bbValueContent.rewind()));
@@ -203,7 +201,7 @@ public class SSTable implements Table {
         try {
             channel.close();
         } catch (IOException e) {
-            log.warn("Cant close channel", e);
+            throw new UncheckedIOException(e);
         }
     }
 

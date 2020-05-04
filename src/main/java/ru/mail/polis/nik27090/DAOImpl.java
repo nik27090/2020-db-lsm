@@ -11,6 +11,7 @@ import ru.mail.polis.Record;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,8 +24,6 @@ import java.util.TreeMap;
 import java.util.stream.Stream;
 
 public class DAOImpl implements DAO {
-    private static final Logger log = LoggerFactory.getLogger(Client.class);
-
     private static final String SUFFIX = ".dat";
     private static final String TEMP = ".tmp";
 
@@ -69,7 +68,7 @@ public class DAOImpl implements DAO {
                             this.generation = Math.max(this.generation, foundedGen);
                             ssTables.put(foundedGen, new SSTable(element.toFile()));
                         } catch (IOException e) {
-                            log.warn("Cant read file", e);
+                            throw new UncheckedIOException(e);
                         }
                     });
         }
