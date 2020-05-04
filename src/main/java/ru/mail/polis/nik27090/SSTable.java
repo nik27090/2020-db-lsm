@@ -26,7 +26,6 @@ public class SSTable implements Table {
 
     /**
      * Stores data in bit representation.
-     *
      * file structure: [row] ... [index] ... number of row.
      * row - keyLen, keyBytes, timeStamp, isAlive, valueLen, valueBytes.
      * index - start point position of row.
@@ -52,7 +51,7 @@ public class SSTable implements Table {
      * @param size     number of records in MemTable
      */
     public static void serialize(final File file, final Iterator<Cell> iterator, final int size) {
-        try (final FileChannel fileChannel = FileChannel.open(file.toPath(),
+        try (FileChannel fileChannel = FileChannel.open(file.toPath(),
                 StandardOpenOption.CREATE,
                 StandardOpenOption.WRITE,
                 StandardOpenOption.TRUNCATE_EXISTING)) {
@@ -206,17 +205,21 @@ public class SSTable implements Table {
     }
 
     private Cell nextElement() {
-        ByteBuffer bbKeyValue = null;
+        final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
         try {
-            final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
             channel.read(bbKeySize, iterPosition);
+        } catch (IOException e) {
+            log.warn(CANT_READ, e);
+        }
 
-            bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
-            iterPosition += bbKeySize.limit();
+        ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
+        iterPosition += bbKeySize.limit();
+        try {
             channel.read(bbKeyValue, iterPosition);
         } catch (IOException e) {
             log.warn(CANT_READ, e);
         }
+
         return getCell(bbKeyValue);
     }
 

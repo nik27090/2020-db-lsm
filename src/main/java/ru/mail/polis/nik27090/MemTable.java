@@ -61,7 +61,6 @@ public class MemTable implements Table {
 
     /**
      * approximate Cell size calculation with dead value.
-     *
      * key = 44 + size = (ByteBuffer - (16 + 4 + 4 + 16 + 4 + size))
      * +
      * value = 25 = headline - 16, tombStone - 1, timeStamp - 8
@@ -85,7 +84,6 @@ public class MemTable implements Table {
 
     /**
      * approximate Cell size calculation with alive value.
-     *
      * value = 74 + size (headline - 16, link - 4, timestamp(long) - 8, tombStone(boolean) - 1,
      * content(ByteBuffer) - (headline - 16, link - 4, int - 4, boolean - 1, byte[] - (16 + 4 + size)))
      * +

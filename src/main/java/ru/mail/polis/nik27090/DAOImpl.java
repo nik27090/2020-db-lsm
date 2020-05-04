@@ -15,13 +15,12 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-
-import java.util.List;
-import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.stream.Stream;
-import java.util.NavigableMap;
 
 public class DAOImpl implements DAO {
     private static final Logger log = LoggerFactory.getLogger(Client.class);
@@ -42,8 +41,8 @@ public class DAOImpl implements DAO {
     /**
      * Creates key-value database.
      *
-     * @param storage
-     * @param heapSize
+     * @param storage data storage
+     * @param heapSize max size of java heap
      */
     public DAOImpl(
             @NotNull final File storage,
