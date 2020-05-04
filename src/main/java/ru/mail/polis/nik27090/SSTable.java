@@ -115,7 +115,7 @@ public class SSTable implements Table {
     }
 
     private Cell findElement(final ByteBuffer from) throws IOException {
-        ByteBuffer key = from.rewind();
+        final ByteBuffer key = from.rewind();
         int low = 0;
         int high = amountElement - 1;
         int mid;
@@ -212,7 +212,7 @@ public class SSTable implements Table {
             log.warn(CANT_READ, e);
         }
 
-        ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
+        final ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
         iterPosition += bbKeySize.limit();
         try {
             channel.read(bbKeyValue, iterPosition);
@@ -224,7 +224,7 @@ public class SSTable implements Table {
     }
 
     /**
-     * closes the channel
+     * closes the channel.
      */
     public void closeChannel() {
         try {
