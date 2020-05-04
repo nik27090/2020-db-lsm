@@ -16,13 +16,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-import java.util.NavigableMap;
-import java.util.TreeMap;
-import java.util.Iterator;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.TreeMap;
 import java.util.stream.Stream;
-
+import java.util.NavigableMap;
 
 public class DAOImpl implements DAO {
     private static final Logger log = LoggerFactory.getLogger(Client.class);
@@ -40,6 +39,12 @@ public class DAOImpl implements DAO {
 
     private int generation;
 
+    /**
+     * Creates key-value database.
+     *
+     * @param storage
+     * @param heapSize
+     */
     public DAOImpl(
             @NotNull final File storage,
             final long heapSize) throws IOException {
@@ -59,7 +64,7 @@ public class DAOImpl implements DAO {
                             final int foundedGen = Integer.parseInt(name.substring(0, name.indexOf(SUFFIX)));
                             this.generation = Math.max(this.generation, foundedGen);
                             ssTables.put(foundedGen, new SSTable(element.toFile()));
-                        } catch (Exception e) {
+                        } catch (IOException e) {
                             log.warn("Cant read file", e);
                         }
                     });

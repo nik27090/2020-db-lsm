@@ -15,6 +15,7 @@ import java.util.Iterator;
 
 public class SSTable implements Table {
 
+    private static final String CANT_READ = "Cant read file";
     private static final Logger log = LoggerFactory.getLogger(Client.class);
 
     private final FileChannel channel;
@@ -25,7 +26,7 @@ public class SSTable implements Table {
 
     /**
      * Stores data in bit representation.
-     * <p>
+     *
      * file structure: [row] ... [index] ... number of row.
      * row - keyLen, keyBytes, timeStamp, isAlive, valueLen, valueBytes.
      * index - start point position of row.
@@ -51,11 +52,11 @@ public class SSTable implements Table {
      * @param size     number of records in MemTable
      */
     public static void serialize(final File file, final Iterator<Cell> iterator, final int size) {
-        try {
-            final FileChannel fileChannel = FileChannel.open(file.toPath(),
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.WRITE,
-                    StandardOpenOption.TRUNCATE_EXISTING);
+        try (final FileChannel fileChannel = FileChannel.open(file.toPath(),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING)) {
+
             final ArrayList<ByteBuffer> bufOffsetArray = new ArrayList<>();
             while (iterator.hasNext()) {
                 final Cell cell = iterator.next();
@@ -81,7 +82,6 @@ public class SSTable implements Table {
             for (final ByteBuffer buff : bufOffsetArray) {
                 fileChannel.write(buff);
             }
-            fileChannel.close();
         } catch (IOException e) {
             log.warn("Cant write file", e);
         }
@@ -115,8 +115,8 @@ public class SSTable implements Table {
         };
     }
 
-    private Cell findElement(ByteBuffer from) throws IOException {
-        from = from.rewind();
+    private Cell findElement(final ByteBuffer from) throws IOException {
+        ByteBuffer key = from.rewind();
         int low = 0;
         int high = amountElement - 1;
         int mid;
@@ -124,7 +124,7 @@ public class SSTable implements Table {
             mid = low + (high - low) / 2;
             final ByteBuffer midKey = getKeyByOrder(mid).rewind();
 
-            final int compare = midKey.compareTo(from);
+            final int compare = midKey.compareTo(key);
             if (compare < 0) {
                 low = mid + 1;
             } else if (compare > 0) {
@@ -141,7 +141,7 @@ public class SSTable implements Table {
         try {
             channel.read(bbIndex, indexStart + Long.BYTES * order);
         } catch (IOException e) {
-            log.warn("Cant read file", e);
+            log.warn(CANT_READ, e);
         }
 
         iterPosition = bbIndex.getLong(0);
@@ -150,36 +150,36 @@ public class SSTable implements Table {
         try {
             channel.read(bbKeySize, iterPosition);
         } catch (IOException e) {
-            log.warn("Cant read file", e);
+            log.warn(CANT_READ, e);
         }
 
         iterPosition += bbKeySize.limit();
-        ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
+        final ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
         try {
             channel.read(bbKeyValue, iterPosition);
         } catch (IOException e) {
-            log.warn("Cant read file", e);
+            log.warn(CANT_READ, e);
         }
 
         iterPosition += bbKeyValue.limit();
         return bbKeyValue;
     }
 
-    private Cell getCell(final ByteBuffer key) {
+    private Cell getCell(final @NotNull ByteBuffer key) {
         final ByteBuffer bbTimeStamp = ByteBuffer.allocate(Long.BYTES);
 
         //Not duplicated
         try {
             channel.read(bbTimeStamp, iterPosition);
         } catch (IOException e) {
-            log.warn("Cant read file", e);
+            log.warn(CANT_READ, e);
         }
         iterPosition += bbTimeStamp.limit();
         final ByteBuffer bbIsAlive = ByteBuffer.allocate(1);
         try {
             channel.read(bbIsAlive, iterPosition);
         } catch (IOException e) {
-            log.warn("Cant read file", e);
+            log.warn(CANT_READ, e);
         }
         final byte isAlive = bbIsAlive.get(0);
         iterPosition += bbIsAlive.limit();
@@ -191,14 +191,14 @@ public class SSTable implements Table {
             try {
                 channel.read(bbValueSize, iterPosition);
             } catch (IOException e) {
-                log.warn("Cant read file", e);
+                log.warn(CANT_READ, e);
             }
             iterPosition += bbValueSize.limit();
             bbValueContent = ByteBuffer.allocate(bbValueSize.getInt(0));
             try {
                 channel.read(bbValueContent, iterPosition);
             } catch (IOException e) {
-                log.warn("Cant read file", e);
+                log.warn(CANT_READ, e);
             }
             iterPosition += bbValueContent.limit();
             return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), bbValueContent.rewind()));
@@ -215,13 +215,13 @@ public class SSTable implements Table {
             iterPosition += bbKeySize.limit();
             channel.read(bbKeyValue, iterPosition);
         } catch (IOException e) {
-            log.warn("nextElement", e);
+            log.warn(CANT_READ, e);
         }
         return getCell(bbKeyValue);
     }
 
     /**
-     * closes the SSTAble channel
+     * closes the channel
      */
     public void closeChannel() {
         try {
