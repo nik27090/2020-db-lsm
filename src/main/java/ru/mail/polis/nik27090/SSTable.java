@@ -20,8 +20,8 @@ public class SSTable implements Table {
 
     private final FileChannel channel;
     private final int amountElement;
-    private final long indexStart;
 
+    private long[] indices;
     private long iterPosition;
 
     /**
@@ -40,7 +40,14 @@ public class SSTable implements Table {
         channel.read(byteBuffer, size - Integer.BYTES);
         this.amountElement = byteBuffer.getInt(0);
 
-        this.indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
+        long indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
+
+        this.indices = new long[amountElement];
+        for (int i = 0; i < indices.length ; i++) {
+            final ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
+            channel.read(bbIndex, indexStart + i * Long.BYTES);
+            indices[i] = bbIndex.getLong(0);
+        }
     }
 
     /**
@@ -88,40 +95,32 @@ public class SSTable implements Table {
 
     @NotNull
     @Override
-    public Iterator<Cell> iterator(@NotNull final ByteBuffer from) throws IOException {
+    public Iterator<Cell> iterator(@NotNull final ByteBuffer from) {
         return new Iterator<>() {
             final ByteBuffer key = from.duplicate();
-            boolean firstIn = true;
-            Cell firstElement = findElement(key);
+            int next = findElement(key);
 
             @Override
             public boolean hasNext() {
-                if (firstElement == null) {
-                    return false;
-                }
-                return indexStart >= iterPosition;
+                return amountElement > next;
             }
 
             @Override
             public Cell next() {
-                if (firstIn) {
-                    firstIn = false;
-                    return firstElement;
-                }
                 assert hasNext();
-                return nextElement();
+                return getCell(getKeyByOrder(next++));
             }
         };
     }
 
-    private Cell findElement(final ByteBuffer from) throws IOException {
-        final ByteBuffer key = from.rewind();
+    private int findElement(final ByteBuffer from) {
+        final ByteBuffer key = from.rewind().duplicate();
         int low = 0;
         int high = amountElement - 1;
         int mid;
         while (low <= high) {
             mid = low + (high - low) / 2;
-            final ByteBuffer midKey = getKeyByOrder(mid).rewind();
+            final ByteBuffer midKey = getKeyByOrder(mid);
 
             final int compare = midKey.compareTo(key);
             if (compare < 0) {
@@ -129,21 +128,15 @@ public class SSTable implements Table {
             } else if (compare > 0) {
                 high = mid - 1;
             } else {
-                return getCell(midKey);
+                return mid;
             }
         }
-        return null;
+        return low;
     }
 
     private ByteBuffer getKeyByOrder(final int order) {
-        final ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
-        try {
-            channel.read(bbIndex, indexStart + Long.BYTES * order);
-        } catch (IOException e) {
-            log.warn(CANT_READ, e);
-        }
 
-        iterPosition = bbIndex.getLong(0);
+        iterPosition = indices[order];
         //Not duplicate
         final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
         try {
@@ -161,13 +154,12 @@ public class SSTable implements Table {
         }
 
         iterPosition += bbKeyValue.limit();
-        return bbKeyValue;
+        return bbKeyValue.rewind();
     }
 
     private Cell getCell(final @NotNull ByteBuffer key) {
         final ByteBuffer bbTimeStamp = ByteBuffer.allocate(Long.BYTES);
 
-        //Not duplicated
         try {
             channel.read(bbTimeStamp, iterPosition);
         } catch (IOException e) {
@@ -202,25 +194,6 @@ public class SSTable implements Table {
             iterPosition += bbValueContent.limit();
             return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), bbValueContent.rewind()));
         }
-    }
-
-    private Cell nextElement() {
-        final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
-        try {
-            channel.read(bbKeySize, iterPosition);
-        } catch (IOException e) {
-            log.warn(CANT_READ, e);
-        }
-
-        final ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
-        iterPosition += bbKeySize.limit();
-        try {
-            channel.read(bbKeyValue, iterPosition);
-        } catch (IOException e) {
-            log.warn(CANT_READ, e);
-        }
-
-        return getCell(bbKeyValue);
     }
 
     /**

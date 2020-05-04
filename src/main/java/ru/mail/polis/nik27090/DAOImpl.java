@@ -34,7 +34,7 @@ public class DAOImpl implements DAO {
     @NotNull
     private final File storage;
     private final long flushSize;
-    private static final double COEFF = 0.005;
+    private static final double COEFF = 0.1;
 
     private int generation;
 
@@ -56,7 +56,12 @@ public class DAOImpl implements DAO {
 
         try (Stream<Path> paths = Files.list(storage.toPath())) {
             paths
-                    .filter(path -> path.toString().endsWith(SUFFIX))
+                    .filter(path -> {
+                        final String name = path.getFileName().toString();
+                        return name.endsWith(SUFFIX)
+                                && !path.toFile().isDirectory()
+                                && !name.substring(0, name.indexOf(SUFFIX)).matches("[a-zA-Z]+");
+                    })
                     .forEach(element -> {
                         try {
                             final String name = element.getFileName().toString();
@@ -77,15 +82,9 @@ public class DAOImpl implements DAO {
         final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size() + 1);
         iterators.add(memTable.iterator(from));
         ssTables.descendingMap().values().forEach(ssTable -> {
-            try {
                 iterators.add(ssTable.iterator(from));
-            } catch (IOException e) {
-                log.warn("Cant read file", e);
-            }
         });
-        // sorted duplicates
         final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
-        //one cell per key
         final Iterator<Cell> fresh = Iters.collapseEquals(merged, Cell::getKey);
         final Iterator<Cell> alive = Iterators.filter(fresh, el -> !el.getValue().isTombStone());
         return Iterators.transform(alive, el -> Record.of(el.getKey(), el.getValue().getContent()));
