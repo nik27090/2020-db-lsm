@@ -15,7 +15,7 @@ final class Value implements Comparable<Value> {
         this.tombStone = false;
     }
 
-    public Value(final long timestamp, boolean tombStone) {
+    public Value(final long timestamp, final boolean tombStone) {
         this.timestamp = timestamp;
         this.tombStone = tombStone;
         this.content = null;
@@ -35,7 +35,7 @@ final class Value implements Comparable<Value> {
     }
 
     @Override
-    public int compareTo(@NotNull Value o) {
+    public int compareTo(@NotNull final Value o) {
         return Long.compare(o.timestamp, timestamp);
     }
 }

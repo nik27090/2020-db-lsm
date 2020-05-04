@@ -18,34 +18,47 @@ public class SSTable implements Table {
     private static final Logger log = LoggerFactory.getLogger(Client.class);
 
     private final FileChannel channel;
-    //количесвтой байт
     private final int amountElement;
     private final long indexStart;
 
     private long iterPosition;
 
+    /**
+     * Stores data in bit representation.
+     * <p>
+     * file structure: [row] ... [index] ... number of row.
+     * row - keyLen, keyBytes, timeStamp, isAlive, valueLen, valueBytes.
+     * index - start point position of row.
+     *
+     * @param file file created using serialize()
+     */
     SSTable(@NotNull final File file) throws IOException {
         this.channel = FileChannel.open(file.toPath(), StandardOpenOption.READ);
         final long size = channel.size();
-        ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
 
         channel.read(byteBuffer, size - Integer.BYTES);
         this.amountElement = byteBuffer.getInt(0);
 
         this.indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
-        //rows
-        //index : rows x len
-        //[row]
-        // row == keyLeaght, keyBytes, timestamp, isAlive, [valueLenght, valueBytes]
     }
 
-    public static void serialize(File file, Iterator<Cell> iterator, int size) throws IOException {
-        FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-                StandardOpenOption.TRUNCATE_EXISTING);
-        ArrayList<ByteBuffer> bufOffsetArray = new ArrayList<>();
-        while (iterator.hasNext()) {
-            try {
-                Cell cell = iterator.next();
+    /**
+     * Converts MemTable to SSTable and writes it on disk.
+     *
+     * @param file     temporary file for recording
+     * @param iterator contains all Cell of MemTable
+     * @param size     number of records in MemTable
+     */
+    public static void serialize(final File file, final Iterator<Cell> iterator, final int size) {
+        try {
+            final FileChannel fileChannel = FileChannel.open(file.toPath(),
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+            final ArrayList<ByteBuffer> bufOffsetArray = new ArrayList<>();
+            while (iterator.hasNext()) {
+                final Cell cell = iterator.next();
                 //указатель
                 bufOffsetArray.add(longToByteBuffer(fileChannel.position()));
                 //keySize
@@ -62,24 +75,25 @@ public class SSTable implements Table {
                     fileChannel.write(intToByteBuffer(cell.getValue().getContent().limit()));
                     fileChannel.write(cell.getValue().getContent());
                 }
-            } catch (IOException e) {
-                System.out.println("Error: " + e);
             }
+            //количество элементов
+            bufOffsetArray.add(intToByteBuffer(size));
+            for (final ByteBuffer buff : bufOffsetArray) {
+                fileChannel.write(buff);
+            }
+            fileChannel.close();
+        } catch (IOException e) {
+            log.warn("Cant write file", e);
         }
-        //количество элементов
-        bufOffsetArray.add(intToByteBuffer(size));
-        for (ByteBuffer buff : bufOffsetArray) {
-            fileChannel.write(buff);
-        }
-        fileChannel.close();
     }
 
     @NotNull
     @Override
-    public Iterator<Cell> iterator(@NotNull ByteBuffer from) {
+    public Iterator<Cell> iterator(@NotNull final ByteBuffer from) throws IOException {
         return new Iterator<>() {
+            final ByteBuffer key = from.duplicate();
             boolean firstIn = true;
-            Cell firstElement = findElement(from);
+            Cell firstElement = findElement(key);
 
             @Override
             public boolean hasNext() {
@@ -101,16 +115,16 @@ public class SSTable implements Table {
         };
     }
 
-    private Cell findElement(ByteBuffer from) {
+    private Cell findElement(ByteBuffer from) throws IOException {
         from = from.rewind();
         int low = 0;
         int high = amountElement - 1;
         int mid;
         while (low <= high) {
             mid = low + (high - low) / 2;
-            ByteBuffer midKey = getKeyByOrder(mid).rewind();
+            final ByteBuffer midKey = getKeyByOrder(mid).rewind();
 
-            int compare = midKey.compareTo(from);
+            final int compare = midKey.compareTo(from);
             if (compare < 0) {
                 low = mid + 1;
             } else if (compare > 0) {
@@ -122,70 +136,79 @@ public class SSTable implements Table {
         return null;
     }
 
-    //order - 1й, 2й, 3й и тд
-    private ByteBuffer getKeyByOrder(int order) {
-        ByteBuffer bbKeyValue = null;
+    private ByteBuffer getKeyByOrder(final int order) {
+        final ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
         try {
-            ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
             channel.read(bbIndex, indexStart + Long.BYTES * order);
-
-            iterPosition = bbIndex.getLong(0);
-            ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
-            channel.read(bbKeySize, iterPosition);
-
-            iterPosition += bbKeySize.limit();
-            bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
-            channel.read(bbKeyValue, iterPosition);
-
-            iterPosition += bbKeyValue.limit();
-            return bbKeyValue;
         } catch (IOException e) {
-            log.error("getKeyByOrder", e);
+            log.warn("Cant read file", e);
         }
+
+        iterPosition = bbIndex.getLong(0);
+        //Not duplicate
+        final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
+        try {
+            channel.read(bbKeySize, iterPosition);
+        } catch (IOException e) {
+            log.warn("Cant read file", e);
+        }
+
+        iterPosition += bbKeySize.limit();
+        ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
+        try {
+            channel.read(bbKeyValue, iterPosition);
+        } catch (IOException e) {
+            log.warn("Cant read file", e);
+        }
+
+        iterPosition += bbKeyValue.limit();
         return bbKeyValue;
     }
 
-    //должен вызываться только в nextElement() и findElement()
-    private Cell getCell(ByteBuffer key) {
-        Cell result = null;
+    private Cell getCell(final ByteBuffer key) {
+        final ByteBuffer bbTimeStamp = ByteBuffer.allocate(Long.BYTES);
+
+        //Not duplicated
         try {
-            ByteBuffer bbTimeStamp = ByteBuffer.allocate(Long.BYTES);
             channel.read(bbTimeStamp, iterPosition);
-
-            iterPosition += bbTimeStamp.limit();
-            ByteBuffer bbIsAlive = ByteBuffer.allocate(1);
-            channel.read(bbIsAlive, iterPosition);
-
-            byte isAlive = bbIsAlive.get(0);
-            iterPosition += bbIsAlive.limit();
-
-            ByteBuffer bbValueContent;
-
-            if (isAlive == 1) {
-                result = new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), true));
-            } else {
-                ByteBuffer bbValueSize = ByteBuffer.allocate(Integer.BYTES);
-                channel.read(bbValueSize, iterPosition);
-
-                iterPosition += bbValueSize.limit();
-
-                bbValueContent = ByteBuffer.allocate(bbValueSize.getInt(0));
-                channel.read(bbValueContent, iterPosition);
-
-                iterPosition += bbValueContent.limit();
-
-                result = new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), bbValueContent.rewind()));
-            }
         } catch (IOException e) {
-            log.warn("getCell", e);
+            log.warn("Cant read file", e);
         }
-        return result;
+        iterPosition += bbTimeStamp.limit();
+        final ByteBuffer bbIsAlive = ByteBuffer.allocate(1);
+        try {
+            channel.read(bbIsAlive, iterPosition);
+        } catch (IOException e) {
+            log.warn("Cant read file", e);
+        }
+        final byte isAlive = bbIsAlive.get(0);
+        iterPosition += bbIsAlive.limit();
+        ByteBuffer bbValueContent;
+        if (isAlive == 1) {
+            return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), true));
+        } else {
+            final ByteBuffer bbValueSize = ByteBuffer.allocate(Integer.BYTES);
+            try {
+                channel.read(bbValueSize, iterPosition);
+            } catch (IOException e) {
+                log.warn("Cant read file", e);
+            }
+            iterPosition += bbValueSize.limit();
+            bbValueContent = ByteBuffer.allocate(bbValueSize.getInt(0));
+            try {
+                channel.read(bbValueContent, iterPosition);
+            } catch (IOException e) {
+                log.warn("Cant read file", e);
+            }
+            iterPosition += bbValueContent.limit();
+            return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), bbValueContent.rewind()));
+        }
     }
 
     private Cell nextElement() {
         ByteBuffer bbKeyValue = null;
         try {
-            ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
+            final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
             channel.read(bbKeySize, iterPosition);
 
             bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
@@ -197,6 +220,9 @@ public class SSTable implements Table {
         return getCell(bbKeyValue);
     }
 
+    /**
+     * closes the SSTAble channel
+     */
     public void closeChannel() {
         try {
             channel.close();
@@ -206,20 +232,20 @@ public class SSTable implements Table {
     }
 
     @Override
-    public void upsert(@NotNull ByteBuffer key, @NotNull ByteBuffer value) throws IOException {
+    public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) {
         throw new UnsupportedOperationException("Unsupported method!");
     }
 
     @Override
-    public void remove(@NotNull ByteBuffer key) throws IOException {
+    public void remove(@NotNull final ByteBuffer key) {
         throw new UnsupportedOperationException("Unsupported method!");
     }
 
-    private static ByteBuffer longToByteBuffer(long value) {
+    private static ByteBuffer longToByteBuffer(final long value) {
         return ByteBuffer.allocate(Long.BYTES).putLong(value).rewind();
     }
 
-    private static ByteBuffer intToByteBuffer(int value) {
+    private static ByteBuffer intToByteBuffer(final int value) {
         return ByteBuffer.allocate(Integer.BYTES).putInt(value).rewind();
     }
 }

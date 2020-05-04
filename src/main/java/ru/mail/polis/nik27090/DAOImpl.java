@@ -18,13 +18,14 @@ import java.nio.file.StandardCopyOption;
 
 import java.util.NavigableMap;
 import java.util.TreeMap;
-import java.util.stream.Stream;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
+
 
 public class DAOImpl implements DAO {
-//    private static final Logger log = LoggerFactory.getLogger(Client.class);
+    private static final Logger log = LoggerFactory.getLogger(Client.class);
 
     private static final String SUFFIX = ".dat";
     private static final String TEMP = ".tmp";
@@ -35,7 +36,7 @@ public class DAOImpl implements DAO {
     @NotNull
     private final File storage;
     private final long flushSize;
-    private final static double coeff = 0.005;
+    private static final double COEFF = 0.005;
 
     private int generation;
 
@@ -43,7 +44,7 @@ public class DAOImpl implements DAO {
             @NotNull final File storage,
             final long heapSize) throws IOException {
         this.storage = storage;
-        this.flushSize = (long) (heapSize * coeff);
+        this.flushSize = (long) (heapSize * COEFF);
         assert flushSize > 0L;
         this.ssTables = new TreeMap<>();
         this.memTable = new MemTable();
@@ -55,11 +56,11 @@ public class DAOImpl implements DAO {
                     .forEach(element -> {
                         try {
                             final String name = element.getFileName().toString();
-                            final int generation = Integer.parseInt(name.substring(0, name.indexOf(SUFFIX)));
-                            this.generation = Math.max(this.generation, generation);
-                            ssTables.put(generation, new SSTable(element.toFile()));
+                            final int foundedGen = Integer.parseInt(name.substring(0, name.indexOf(SUFFIX)));
+                            this.generation = Math.max(this.generation, foundedGen);
+                            ssTables.put(foundedGen, new SSTable(element.toFile()));
                         } catch (Exception e) {
-                            //todo log
+                            log.warn("Cant read file", e);
                         }
                     });
         }
@@ -68,11 +69,15 @@ public class DAOImpl implements DAO {
 
     @NotNull
     @Override
-    public Iterator<Record> iterator(@NotNull final ByteBuffer from) throws IOException {
+    public Iterator<Record> iterator(@NotNull final ByteBuffer from) {
         final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size() + 1);
         iterators.add(memTable.iterator(from));
         ssTables.descendingMap().values().forEach(ssTable -> {
+            try {
                 iterators.add(ssTable.iterator(from));
+            } catch (IOException e) {
+                log.warn("Cant read file", e);
+            }
         });
         // sorted duplicates
         final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);

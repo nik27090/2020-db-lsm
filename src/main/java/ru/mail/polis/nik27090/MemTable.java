@@ -12,11 +12,13 @@ public class MemTable implements Table {
     private long sizeInBytes;
     private int size;
 
+    /**
+     * Creates table of data in memory.
+     */
     public MemTable() {
         this.sortedMap = new TreeMap<>();
         this.sizeInBytes = 0L;
         this.size = 0;
-        this.sizeInBytes = 0;
     }
 
     @NotNull
@@ -57,40 +59,42 @@ public class MemTable implements Table {
         return sizeInBytes;
     }
 
-    /*
-    key = 44 + size {
-        ByteBuffer - (16 + 4 + 4 + 16 + 4 + size)
-        }
-    value = 25 byte {
-        headline - 16 byte
-        tombStone - 1 byte
-        timeStamp - 8 byte
-        }
-
-     result = 69 + keySize
+    /**
+     * approximate Cell size calculation with dead value.
+     * <p>
+     * key = 44 + size = (ByteBuffer - (16 + 4 + 4 + 16 + 4 + size))
+     * +
+     * value = 25 = headline - 16, tombStone - 1, timeStamp - 8
+     * =
+     * 69 + keySize
+     *
+     * @param key key of Cell.
      */
     private long sizeOfElement(final ByteBuffer key) {
         return 69L + key.limit();
     }
 
+    /**
+     * approximate Value of Cell size calculation.
+     *
+     * @param value value of Cell
+     */
     private long sizeOfElement(final Value value) {
         return 74L + value.getContent().limit();
     }
 
-    /*
-        value = 74 + size {
-        headline - 16 byte
-        link - 4 byte
-        timestamp(long) - 8 byte
-        tombStone(boolean) - 1 byte
-        value(ByteBuffer) - [headline - 16 byte, link - 4 byte, int - 4 byte,
-                                boolean - 1 byte, byte[] - (16 + 4 + size)]
-        }
-        key = 44 + size{
-        ByteBuffer - (16 + 4 + 4 + 16 + 4 + size)
-        }
-
-        result = 118 + keySize + valueSize
+    /**
+     * approximate Cell size calculation with alive value.
+     * <p>
+     * value = 74 + size (headline - 16, link - 4, timestamp(long) - 8, tombStone(boolean) - 1,
+     * content(ByteBuffer) - (headline - 16, link - 4, int - 4, boolean - 1, byte[] - (16 + 4 + size)))
+     * +
+     * key = 44 + size (ByteBuffer - (16 + 4 + 4 + 16 + 4 + size))
+     * =
+     * 118 + keySize + contentSize
+     *
+     * @param key   key of Cell
+     * @param value value of Cell
      */
     private long sizeOfElement(final ByteBuffer key, final Value value) {
         return 118L + key.limit() + value.getContent().limit();
