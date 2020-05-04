@@ -21,7 +21,7 @@ public class SSTable implements Table {
     private final FileChannel channel;
     private final int amountElement;
 
-    private long[] indices;
+    private final long[] indices;
     private long iterPosition;
 
     /**
@@ -40,10 +40,10 @@ public class SSTable implements Table {
         channel.read(byteBuffer, size - Integer.BYTES);
         this.amountElement = byteBuffer.getInt(0);
 
-        long indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
+        final long indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
 
         this.indices = new long[amountElement];
-        for (int i = 0; i < indices.length ; i++) {
+        for (int i = 0; i < indices.length; i++) {
             final ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
             channel.read(bbIndex, indexStart + i * Long.BYTES);
             indices[i] = bbIndex.getLong(0);
