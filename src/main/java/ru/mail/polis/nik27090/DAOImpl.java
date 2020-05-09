@@ -30,7 +30,6 @@ public class DAOImpl implements DAO {
     @NotNull
     private final File storage;
     private final long flushSize;
-    private static final double COEFF = 0.1;
 
     private int generation;
 
@@ -38,13 +37,13 @@ public class DAOImpl implements DAO {
      * Creates key-value database.
      *
      * @param storage data storage
-     * @param heapSize max size of java heap
+     * @param flushSize MemTable size at which MemTable converted to SSTable
      */
     public DAOImpl(
             @NotNull final File storage,
-            final long heapSize) throws IOException {
+            final long flushSize) throws IOException {
         this.storage = storage;
-        this.flushSize = (long) (heapSize * COEFF);
+        this.flushSize = flushSize;
         assert flushSize > 0L;
         this.ssTables = new TreeMap<>();
         this.memTable = new MemTable();
@@ -75,20 +74,21 @@ public class DAOImpl implements DAO {
     @NotNull
     @Override
     public Iterator<Record> iterator(@NotNull final ByteBuffer from) {
+        final ByteBuffer key = from.rewind().duplicate();
         final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size() + 1);
-        iterators.add(memTable.iterator(from));
+        iterators.add(memTable.iterator(key));
         ssTables.descendingMap().values().forEach(ssTable -> {
-                iterators.add(ssTable.iterator(from));
+                iterators.add(ssTable.iterator(key));
         });
         final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
         final Iterator<Cell> fresh = Iters.collapseEquals(merged, Cell::getKey);
-        final Iterator<Cell> alive = Iterators.filter(fresh, el -> !el.getValue().isTombStone());
+        final Iterator<Cell> alive = Iterators.filter(fresh, el -> el.getValue().getContent() != null);
         return Iterators.transform(alive, el -> Record.of(el.getKey(), el.getValue().getContent()));
     }
 
     @Override
     public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
-        memTable.upsert(key, value);
+        memTable.upsert(key.rewind().duplicate(), value.rewind().duplicate());
         if (memTable.getSizeInBytes() > flushSize) {
             flush();
         }
@@ -96,7 +96,7 @@ public class DAOImpl implements DAO {
 
     @Override
     public void remove(@NotNull final ByteBuffer key) throws IOException {
-        memTable.remove(key);
+        memTable.remove(key.rewind().duplicate());
         if (memTable.getSizeInBytes() > flushSize) {
             flush();
         }
@@ -119,6 +119,6 @@ public class DAOImpl implements DAO {
     @Override
     public void close() throws IOException {
         flush();
-        ssTables.values().forEach(SSTable::closeChannel);
+        ssTables.values().forEach(SSTable::close);
     }
 }

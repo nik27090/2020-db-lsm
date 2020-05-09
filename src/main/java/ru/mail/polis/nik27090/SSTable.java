@@ -2,6 +2,7 @@ package ru.mail.polis.nik27090;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -10,14 +11,15 @@ import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
-public class SSTable implements Table {
+public class SSTable implements Table, Closeable {
 
     private final FileChannel channel;
     private final int amountElement;
 
-    private final long[] indices;
     private long iterPosition;
+    private final long indexStart;
 
     /**
      * Stores data in bit representation.
@@ -35,14 +37,7 @@ public class SSTable implements Table {
         channel.read(byteBuffer, size - Integer.BYTES);
         this.amountElement = byteBuffer.getInt(0);
 
-        final long indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
-
-        this.indices = new long[amountElement];
-        for (int i = 0; i < indices.length; i++) {
-            final ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
-            channel.read(bbIndex, indexStart + i * Long.BYTES);
-            indices[i] = bbIndex.getLong(0);
-        }
+        this.indexStart = size - Integer.BYTES - Long.BYTES * amountElement;
     }
 
     /**
@@ -58,23 +53,22 @@ public class SSTable implements Table {
                 StandardOpenOption.WRITE,
                 StandardOpenOption.TRUNCATE_EXISTING)) {
 
-            final ArrayList<ByteBuffer> bufOffsetArray = new ArrayList<>();
+            final List<ByteBuffer> bufOffsetArray = new ArrayList<>();
             while (iterator.hasNext()) {
                 final Cell cell = iterator.next();
                 //указатель
                 bufOffsetArray.add(longToByteBuffer(fileChannel.position()));
                 //keySize
-                fileChannel.write(intToByteBuffer(cell.getKey().limit()));
+                fileChannel.write(intToByteBuffer(cell.getKey().remaining()));
                 //keyBytes
                 fileChannel.write(cell.getKey());
-                //timestamp
-                fileChannel.write(longToByteBuffer(cell.getValue().getTimestamp()));
                 //isAlive
-                if (cell.getValue().isTombStone()) {
-                    fileChannel.write(ByteBuffer.wrap(new byte[]{1}));
+                if (cell.getValue().getContent() == null) {
+                    //отрицательный timestamp = tombstone
+                    fileChannel.write(longToByteBuffer(-cell.getValue().getTimestamp()));
                 } else {
-                    fileChannel.write(ByteBuffer.wrap(new byte[]{0}));
-                    fileChannel.write(intToByteBuffer(cell.getValue().getContent().limit()));
+                    fileChannel.write(longToByteBuffer(cell.getValue().getTimestamp()));
+                    fileChannel.write(intToByteBuffer(cell.getValue().getContent().remaining()));
                     fileChannel.write(cell.getValue().getContent());
                 }
             }
@@ -103,9 +97,17 @@ public class SSTable implements Table {
             @Override
             public Cell next() {
                 assert hasNext();
-                return getCell(getKeyByOrder(next++));
+                return getNext(next++);
             }
         };
+    }
+
+    private Cell getNext(int next){
+        try {
+            return getCell(getKeyByOrder(next));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private int findElement(final ByteBuffer from) {
@@ -115,7 +117,12 @@ public class SSTable implements Table {
         int mid;
         while (low <= high) {
             mid = low + (high - low) / 2;
-            final ByteBuffer midKey = getKeyByOrder(mid);
+            final ByteBuffer midKey;
+            try {
+                midKey = getKeyByOrder(mid);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
 
             final int compare = midKey.compareTo(key);
             if (compare < 0) {
@@ -129,72 +136,50 @@ public class SSTable implements Table {
         return low;
     }
 
-    private ByteBuffer getKeyByOrder(final int order) {
+    private ByteBuffer getKeyByOrder(final int order) throws IOException {
+        final ByteBuffer bbIndex = ByteBuffer.allocate(Long.BYTES);
+        channel.read(bbIndex, indexStart + order * Long.BYTES);
+        iterPosition = bbIndex.getLong(0);
 
-        iterPosition = indices[order];
         //Not duplicate
         final ByteBuffer bbKeySize = ByteBuffer.allocate(Integer.BYTES);
-        try {
-            channel.read(bbKeySize, iterPosition);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-
+        channel.read(bbKeySize, iterPosition);
         iterPosition += bbKeySize.limit();
-        final ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
-        try {
-            channel.read(bbKeyValue, iterPosition);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
 
+        final ByteBuffer bbKeyValue = ByteBuffer.allocate(bbKeySize.getInt(0));
+        channel.read(bbKeyValue, iterPosition);
         iterPosition += bbKeyValue.limit();
+
         return bbKeyValue.rewind();
     }
 
-    private Cell getCell(final @NotNull ByteBuffer key) {
+    private Cell getCell(final @NotNull ByteBuffer key) throws IOException {
         final ByteBuffer bbTimeStamp = ByteBuffer.allocate(Long.BYTES);
-
-        try {
-            channel.read(bbTimeStamp, iterPosition);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        channel.read(bbTimeStamp, iterPosition);
+        long timestamp = bbTimeStamp.getLong(0);
         iterPosition += bbTimeStamp.limit();
-        final ByteBuffer bbIsAlive = ByteBuffer.allocate(1);
-        try {
-            channel.read(bbIsAlive, iterPosition);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        final byte isAlive = bbIsAlive.get(0);
-        iterPosition += bbIsAlive.limit();
+
         ByteBuffer bbValueContent;
-        if (isAlive == 1) {
-            return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), true));
+        if (timestamp < 0) {
+            return new Cell(key.rewind(), new Value(-timestamp));
         } else {
             final ByteBuffer bbValueSize = ByteBuffer.allocate(Integer.BYTES);
-            try {
-                channel.read(bbValueSize, iterPosition);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+            channel.read(bbValueSize, iterPosition);
             iterPosition += bbValueSize.limit();
+
             bbValueContent = ByteBuffer.allocate(bbValueSize.getInt(0));
-            try {
-                channel.read(bbValueContent, iterPosition);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
+            channel.read(bbValueContent, iterPosition);
             iterPosition += bbValueContent.limit();
-            return new Cell(key.rewind(), new Value(bbTimeStamp.getLong(0), bbValueContent.rewind()));
+
+            return new Cell(key.rewind(), new Value(timestamp, bbValueContent.rewind()));
         }
     }
 
     /**
      * closes the channel.
      */
-    public void closeChannel() {
+    @Override
+    public void close() {
         try {
             channel.close();
         } catch (IOException e) {

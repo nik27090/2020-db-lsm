@@ -7,7 +7,7 @@ import java.util.Comparator;
 
 public class Cell {
     static final Comparator<Cell> COMPARATOR =
-            Comparator.comparing(Cell::getKey).thenComparing(Cell::getValue);
+            Comparator.comparing(Cell::getKey);
 
     @NotNull
     private final ByteBuffer key;

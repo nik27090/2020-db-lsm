@@ -17,8 +17,6 @@ public class MemTable implements Table {
      */
     public MemTable() {
         this.sortedMap = new TreeMap<>();
-        this.sizeInBytes = 0L;
-        this.size = 0;
     }
 
     @NotNull
@@ -38,48 +36,25 @@ public class MemTable implements Table {
         if (prevValue == null) {
             sizeInBytes += sizeOfElement(key, valueOfElement);
             size++;
-        } else if (prevValue.isTombStone()) {
-            sizeInBytes += sizeOfElement(valueOfElement);
         } else {
-            sizeInBytes += sizeOfElement(valueOfElement) - sizeOfElement(prevValue.getContent());
+            sizeInBytes += sizeOfElement(key, valueOfElement) - sizeOfElement(key, prevValue);
         }
     }
 
     @Override
     public void remove(@NotNull final ByteBuffer key) {
-        final Value valueOfElement = new Value(System.currentTimeMillis(), true);
+        final Value valueOfElement = new Value(System.currentTimeMillis());
         final Value prevValue = sortedMap.put(key.duplicate(), valueOfElement);
         if (prevValue == null) {
-            sizeInBytes += sizeOfElement(key);
+            sizeInBytes += sizeOfElement(key, valueOfElement);
             size++;
+        } else {
+            sizeInBytes += sizeOfElement(key, valueOfElement) - sizeOfElement(key, prevValue);
         }
     }
 
     public long getSizeInBytes() {
         return sizeInBytes;
-    }
-
-    /**
-     * approximate Cell size calculation with dead value.
-     * key = 44 + size = (ByteBuffer - (16 + 4 + 4 + 16 + 4 + size))
-     * +
-     * value = 25 = headline - 16, tombStone - 1, timeStamp - 8
-     * =
-     * 69 + keySize
-     *
-     * @param key key of Cell.
-     */
-    private long sizeOfElement(final ByteBuffer key) {
-        return 69L + key.limit();
-    }
-
-    /**
-     * approximate Value of Cell size calculation.
-     *
-     * @param value value of Cell
-     */
-    private long sizeOfElement(final Value value) {
-        return 74L + value.getContent().limit();
     }
 
     /**
@@ -94,8 +69,12 @@ public class MemTable implements Table {
      * @param key   key of Cell
      * @param value value of Cell
      */
-    private long sizeOfElement(final ByteBuffer key, final Value value) {
-        return 118L + key.limit() + value.getContent().limit();
+    private static long sizeOfElement(final ByteBuffer key, final Value value) {
+        ByteBuffer contentSize = value.getContent();
+        if (contentSize != null){
+            return 118L + key.remaining() + value.getContent().remaining();
+        }
+        return 118L + key.remaining();
     }
 
     public int size() {
