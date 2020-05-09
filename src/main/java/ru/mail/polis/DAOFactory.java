@@ -54,7 +54,6 @@ public final class DAOFactory {
             throw new IllegalArgumentException("Path is not a directory: " + data);
         }
 
-
         final long flushSize = (long)(MAX_HEAP * 0.1);
         // TODO: Implement me
         return new DAOImpl(data, flushSize);

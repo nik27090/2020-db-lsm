@@ -102,7 +102,7 @@ public class SSTable implements Table, Closeable {
         };
     }
 
-    private Cell getNext(int next){
+    private Cell getNext(final int next) {
         try {
             return getCell(getKeyByOrder(next));
         } catch (IOException e) {
@@ -156,7 +156,7 @@ public class SSTable implements Table, Closeable {
     private Cell getCell(final @NotNull ByteBuffer key) throws IOException {
         final ByteBuffer bbTimeStamp = ByteBuffer.allocate(Long.BYTES);
         channel.read(bbTimeStamp, iterPosition);
-        long timestamp = bbTimeStamp.getLong(0);
+        final long timestamp = bbTimeStamp.getLong(0);
         iterPosition += bbTimeStamp.limit();
 
         ByteBuffer bbValueContent;

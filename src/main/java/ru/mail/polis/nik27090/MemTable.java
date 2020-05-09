@@ -70,8 +70,8 @@ public class MemTable implements Table {
      * @param value value of Cell
      */
     private static long sizeOfElement(final ByteBuffer key, final Value value) {
-        ByteBuffer contentSize = value.getContent();
-        if (contentSize != null){
+        final ByteBuffer contentSize = value.getContent();
+        if (contentSize != null) {
             return 118L + key.remaining() + value.getContent().remaining();
         }
         return 118L + key.remaining();
