@@ -55,7 +55,7 @@ public class DAOImpl implements DAO {
                         final String name = path.getFileName().toString();
                         return name.endsWith(SUFFIX)
                                 && !path.toFile().isDirectory()
-                                && !name.substring(0, name.indexOf(SUFFIX)).matches("[a-zA-Z]+");
+                                && name.substring(0, name.indexOf(SUFFIX)).matches("^[0-9]+$");
                     })
                     .forEach(element -> {
                         try {
