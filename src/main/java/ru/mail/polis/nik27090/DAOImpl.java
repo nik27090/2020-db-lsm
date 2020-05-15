@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -87,7 +88,7 @@ public class DAOImpl implements DAO {
     }
 
     @Override
-    public void compactImpl() throws IOException{
+    public void compactImpl() throws IOException {
         flush();
         final int oldGenerate = this.generation - 1;
         final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size());
@@ -100,17 +101,19 @@ public class DAOImpl implements DAO {
 
         while (fresh.hasNext()) {
             final Cell cell = fresh.next();
-            if (cell.getValue().getContent() == null){
+            if (cell.getValue().getContent() == null) {
                 remove(cell.getKey());
             } else {
                 upsert(cell.getKey(), cell.getValue().getContent());
             }
         }
 
-        for (int i = oldGenerate; i >= 0 ; i--) {
+        for (int i = oldGenerate; i >= 0; i--) {
             final File file = new File(storage, i + SUFFIX);
             ssTables.remove(i).close();
-            if (!file.delete()) {
+            try {
+                Files.delete(file.toPath());
+            } catch (NoSuchFileException e) {
                 break;
             }
         }
