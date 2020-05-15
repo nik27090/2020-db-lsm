@@ -87,6 +87,36 @@ public class DAOImpl implements DAO {
     }
 
     @Override
+    public void compactImpl() throws IOException{
+        flush();
+        final int oldGenerate = this.generation - 1;
+        final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size());
+        final ByteBuffer key = ByteBuffer.allocate(0);
+        ssTables.descendingMap().values().forEach(ssTable -> {
+            iterators.add(ssTable.iterator(key));
+        });
+        final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
+        final Iterator<Cell> fresh = Iters.collapseEquals(merged, Cell::getKey);
+
+        while (fresh.hasNext()) {
+            final Cell cell = fresh.next();
+            if (cell.getValue().getContent() == null){
+                remove(cell.getKey());
+            } else {
+                upsert(cell.getKey(), cell.getValue().getContent());
+            }
+        }
+
+        for (int i = oldGenerate; i >= 0 ; i--) {
+            final File file = new File(storage, i + SUFFIX);
+            ssTables.remove(i).close();
+            if (!file.delete()) {
+                break;
+            }
+        }
+    }
+
+    @Override
     public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) throws IOException {
         memTable.upsert(key.rewind().duplicate(), value.rewind().duplicate());
         if (memTable.getSizeInBytes() > flushSize) {
