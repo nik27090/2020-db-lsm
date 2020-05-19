@@ -83,30 +83,27 @@ public class DAOImpl implements DAO {
 
     @Override
     public void compact() throws IOException {
-        final int oldGenerate = this.generation - 1;
         final Iterator<Cell> fresh = getFreshCells(ByteBuffer.allocate(0));
-        while (fresh.hasNext()) {
-            final Cell cell = fresh.next();
-            if (cell.getValue().getContent() == null) {
-                remove(cell.getKey());
-            } else {
-                upsert(cell.getKey(), cell.getValue().getContent());
-            }
-        }
 
-        for (int i = oldGenerate; i >= 0; i--) {
-            final File file = new File(storage, i + SUFFIX);
+        final File file = new File(storage, generation + TEMP);
+        SSTable.serialize(file, fresh);
+
+        for (int i = generation - 1; i >= 0; i--) {
+            final File delFile = new File(storage, i + SUFFIX);
             final SSTable ssTable = ssTables.remove(i);
             if (ssTable == null) {
                 break;
             }
             ssTable.close();
             try {
-                Files.delete(file.toPath());
+                Files.delete(delFile.toPath());
             } catch (NoSuchFileException e) {
                 break;
             }
         }
+
+        generation = 0;
+        atomicMoveTEMPtoSUFFIX(file);
     }
 
     private Iterator<Cell> getFreshCells(@NotNull final ByteBuffer key) {
@@ -139,11 +136,14 @@ public class DAOImpl implements DAO {
         final File file = new File(storage, generation + TEMP);
         SSTable.serialize(
                 file,
-                memTable.iterator(ByteBuffer.allocate(0)),
-                memTable.size());
+                memTable.iterator(ByteBuffer.allocate(0)));
+
+        atomicMoveTEMPtoSUFFIX(file);
+    }
+
+    private void atomicMoveTEMPtoSUFFIX(final File file) throws IOException {
         final File dst = new File(storage, generation + SUFFIX);
         Files.move(file.toPath(), dst.toPath(), StandardCopyOption.ATOMIC_MOVE);
-
         memTable = new MemTable();
         ssTables.put(generation, new SSTable(dst));
         generation++;
@@ -151,7 +151,9 @@ public class DAOImpl implements DAO {
 
     @Override
     public void close() throws IOException {
-        flush();
+        if (memTable.size() > 0) {
+            flush();
+        }
         ssTables.values().forEach(SSTable::close);
     }
 }

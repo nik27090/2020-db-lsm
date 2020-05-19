@@ -45,9 +45,9 @@ public class SSTable implements Table, Closeable {
      *
      * @param file     temporary file for recording
      * @param iterator contains all Cell of MemTable
-     * @param size     number of records in MemTable
      */
-    public static void serialize(final File file, final Iterator<Cell> iterator, final int size) {
+    public static void serialize(final File file, final Iterator<Cell> iterator) {
+        int size = 0;
         try (FileChannel fileChannel = FileChannel.open(file.toPath(),
                 StandardOpenOption.CREATE,
                 StandardOpenOption.WRITE,
@@ -55,6 +55,7 @@ public class SSTable implements Table, Closeable {
 
             final List<ByteBuffer> bufOffsetArray = new ArrayList<>();
             while (iterator.hasNext()) {
+                size++;
                 final Cell cell = iterator.next();
                 //указатель
                 bufOffsetArray.add(longToByteBuffer(fileChannel.position()));
