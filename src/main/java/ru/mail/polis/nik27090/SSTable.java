@@ -187,6 +187,10 @@ public class SSTable implements Table, Closeable {
         }
     }
 
+    public boolean isOpen() {
+        return channel.isOpen();
+    }
+
     @Override
     public void upsert(@NotNull final ByteBuffer key, @NotNull final ByteBuffer value) {
         throw new UnsupportedOperationException("Unsupported method!");
