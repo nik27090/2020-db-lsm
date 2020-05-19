@@ -111,7 +111,7 @@ public class DAOImpl implements DAO {
         for (int i = oldGenerate; i >= 0; i--) {
             final File file = new File(storage, i + SUFFIX);
             final SSTable ssTable = ssTables.remove(i);
-            if (ssTable == null){
+            if (ssTable == null) {
                 break;
             }
             ssTable.close();
