@@ -110,10 +110,10 @@ public class DAOImpl implements DAO {
 
         for (int i = oldGenerate; i >= 0; i--) {
             final File file = new File(storage, i + SUFFIX);
-            ssTables.remove(i).close();
             try {
+                ssTables.remove(i).close();
                 Files.delete(file.toPath());
-            } catch (NoSuchFileException e) {
+            } catch (NullPointerException e) {
                 break;
             }
         }
