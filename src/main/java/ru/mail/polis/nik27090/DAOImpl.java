@@ -76,17 +76,17 @@ public class DAOImpl implements DAO {
     @Override
     public Iterator<Record> iterator(@NotNull final ByteBuffer from) {
         final ByteBuffer key = from.rewind().duplicate();
-        final Iterator<Cell> fresh = getFreshCells(key);
-        final Iterator<Cell> alive = Iterators.filter(fresh, el -> el.getValue().getContent() != null);
+        final Iterator<Cell> alive = getAliveCells(key);
+
         return Iterators.transform(alive, el -> Record.of(el.getKey(), el.getValue().getContent()));
     }
 
     @Override
     public void compact() throws IOException {
-        final Iterator<Cell> fresh = getFreshCells(ByteBuffer.allocate(0));
+        final Iterator<Cell> alive = getAliveCells(ByteBuffer.allocate(0));
 
         final File file = new File(storage, generation + TEMP);
-        SSTable.serialize(file, fresh);
+        SSTable.serialize(file, alive);
 
         for (int i = generation - 1; i >= 0; i--) {
             final File delFile = new File(storage, i + SUFFIX);
@@ -106,14 +106,15 @@ public class DAOImpl implements DAO {
         atomicMoveTempToSuffix(file);
     }
 
-    private Iterator<Cell> getFreshCells(@NotNull final ByteBuffer key) {
+    private Iterator<Cell> getAliveCells(@NotNull final ByteBuffer key) {
         final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size() + 1);
         iterators.add(memTable.iterator(key));
         ssTables.descendingMap().values().forEach(ssTable -> {
             iterators.add(ssTable.iterator(key));
         });
         final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
-        return Iters.collapseEquals(merged, Cell::getKey);
+        final Iterator<Cell> fresh = Iters.collapseEquals(merged, Cell::getKey);
+        return Iterators.filter(fresh, el -> el.getValue().getContent() != null);
     }
 
     @Override
