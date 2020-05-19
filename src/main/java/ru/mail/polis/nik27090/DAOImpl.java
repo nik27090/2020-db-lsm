@@ -76,29 +76,15 @@ public class DAOImpl implements DAO {
     @Override
     public Iterator<Record> iterator(@NotNull final ByteBuffer from) {
         final ByteBuffer key = from.rewind().duplicate();
-        final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size() + 1);
-        iterators.add(memTable.iterator(key));
-        ssTables.descendingMap().values().forEach(ssTable -> {
-                iterators.add(ssTable.iterator(key));
-        });
-        final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
-        final Iterator<Cell> fresh = Iters.collapseEquals(merged, Cell::getKey);
+        final Iterator<Cell> fresh = getFreshCells(key);
         final Iterator<Cell> alive = Iterators.filter(fresh, el -> el.getValue().getContent() != null);
         return Iterators.transform(alive, el -> Record.of(el.getKey(), el.getValue().getContent()));
     }
 
     @Override
-    public void compactImpl() throws IOException {
-        flush();
+    public void compact() throws IOException {
         final int oldGenerate = this.generation - 1;
-        final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size());
-        final ByteBuffer key = ByteBuffer.allocate(0);
-        ssTables.descendingMap().values().forEach(ssTable -> {
-            iterators.add(ssTable.iterator(key));
-        });
-        final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
-        final Iterator<Cell> fresh = Iters.collapseEquals(merged, Cell::getKey);
-
+        final Iterator<Cell> fresh = getFreshCells(ByteBuffer.allocate(0));
         while (fresh.hasNext()) {
             final Cell cell = fresh.next();
             if (cell.getValue().getContent() == null) {
@@ -121,6 +107,16 @@ public class DAOImpl implements DAO {
                 break;
             }
         }
+    }
+
+    private Iterator<Cell> getFreshCells(@NotNull final ByteBuffer key) {
+        final List<Iterator<Cell>> iterators = new ArrayList<>(ssTables.size() + 1);
+        iterators.add(memTable.iterator(key));
+        ssTables.descendingMap().values().forEach(ssTable -> {
+            iterators.add(ssTable.iterator(key));
+        });
+        final Iterator<Cell> merged = Iterators.mergeSorted(iterators, Cell.COMPARATOR);
+        return Iters.collapseEquals(merged, Cell::getKey);
     }
 
     @Override
