@@ -103,7 +103,7 @@ public class DAOImpl implements DAO {
         }
 
         generation = 0;
-        atomicMoveTEMPtoSUFFIX(file);
+        atomicMoveTempToSuffix(file);
     }
 
     private Iterator<Cell> getFreshCells(@NotNull final ByteBuffer key) {
@@ -138,10 +138,10 @@ public class DAOImpl implements DAO {
                 file,
                 memTable.iterator(ByteBuffer.allocate(0)));
 
-        atomicMoveTEMPtoSUFFIX(file);
+        atomicMoveTempToSuffix(file);
     }
 
-    private void atomicMoveTEMPtoSUFFIX(final File file) throws IOException {
+    private void atomicMoveTempToSuffix(final File file) throws IOException {
         final File dst = new File(storage, generation + SUFFIX);
         Files.move(file.toPath(), dst.toPath(), StandardCopyOption.ATOMIC_MOVE);
         memTable = new MemTable();
